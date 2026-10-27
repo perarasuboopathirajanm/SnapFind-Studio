@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ ev.name }} · {{ STUDIO_NAME }}{% endblock %}
+{% block nav %}<a href="/admin">← Dashboard</a><form method="post" action="/admin/logout" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="linkbtn">Log out</button></form>{% endblock %}
+{% block body %}
+<main class="wrap">
+  <h1 style="font-size:2.6rem;margin-bottom:0">{{ ev.name }}</h1>
+  <p class="muted" style="margin-top:4px">{{ ev.event_date or "No date" }} · <span id="count">{{ photos|length }}</span> photos · <span id="faces">{{ face_total }}</span> faces indexed</p>
+
+  <div class="layout">
+    <aside class="card sticky">
+      <h3>Guest QR code</h3>
+      <p class="muted small" style="margin:0">Guests scan this, take a selfie and get their photos.</p>
+      <div class="qrbox"><img src="/admin/events/{{ ev.id }}/qr.png" alt="QR code for {{ ev.name }}"></div>
+      <div class="linkbox"><input id="link" type="text" value="{{ link }}" readonly><button class="btn sm" id="copy">Copy</button></div>
+      <div class="stack" style="margin-top:14px">
+        <a class="btn block" href="/admin/events/{{ ev.id }}/qr.png?size=20" download="{{ ev.slug }}-qr.png">Download QR (PNG)</a>
+        <a class="btn block" href="/admin/events/{{ ev.id }}/poster" target="_blank">Printable poster</a>
+        <a class="btn block" href="{{ link }}" target="_blank">Open guest page</a>
+        <a class="btn block" href="/admin/events/{{ ev.id }}/download.zip">Download all photos (ZIP)</a>
+        <form method="post" action="/admin/events/{{ ev.id }}/delete" onsubmit="return confirmDelete()">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn danger block">Delete event</button>
+        </form>
+      </div>
+    </aside>
+
+    <section>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload photos">
+        <div class="big">Drop event photos here</div>
+        <div class="muted small">or click to choose · JPG, PNG, WEBP, HEIC · up to hundreds at once</div>
+        <input type="file" id="file" accept="image/*" multiple hidden>
+        <div class="progress" id="prog"><i></i></div>
+        <div class="uplog" id="log"></div>
+      </div>
+
+      <h3 style="margin-top:26px">Photos</h3>
+      <div class="grid" id="grid">
+        {% for p in photos %}
+        <div class="tile" data-id="{{ p.id }}" data-faces="{{ p.face_count }}">
+          <img loading="lazy" src="/t/{{ p.uid }}.jpg" alt="{{ p.orig_name }}">
+          <span class="badge {% if p.face_count == 0 %}zero{% endif %}">{{ p.face_count }} face{{ '' if p.face_count == 1 else 's' }}</span>
+          <button class="x" title="Delete photo" onclick="delPhoto(this)">×</button>
+        </div>
+        {% endfor %}
+      </div>
+      {% if not photos %}<p class="muted" id="empty">No photos yet. Upload some above.</p>{% endif %}
+    </section>
+  </div>
+</main>
+
+<script>
+const EID = {{ ev.id }};
+const CSRF = {{ csrf|tojson }};
+const drop = document.getElementById('drop'), input = document.getElementById('file');
+const prog = document.getElementById('prog'), bar = prog.querySelector('i'), log = document.getElementById('log');
+const grid = document.getElementById('grid');
+let busy = false;
+
+document.getElementById('copy').onclick = async (e) => {
+  const v = document.getElementById('link').value;
+  try { await navigator.clipboard.writeText(v); } catch { document.getElementById('link').select(); document.execCommand('copy'); }
+  e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy', 1500);
+};
+function confirmDelete(){ return confirm('Delete this event and ALL its photos? This cannot be undone.'); }
+
+drop.onclick = () => !busy && input.click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drop.click(); } };
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => upload([...e.dataTransfer.files].filter(f => f.type.startsWith('image/') || /\.heic$/i.test(f.name))));
+input.onchange = () => { upload([...input.files]); input.value = ''; };
+
+function addTile(r){
+  document.getElementById('empty')?.remove();
+  const d = document.createElement('div');
+  d.className = 'tile'; d.dataset.id = r.id; d.dataset.faces = r.faces;
+  d.innerHTML = `<img src="${r.thumb}" alt=""><span class="badge ${r.faces ? '' : 'zero'}">${r.faces} face${r.faces === 1 ? '' : 's'}</span><button class="x" title="Delete photo" onclick="delPhoto(this)">×</button>`;
+  grid.prepend(d);
+}
+function bump(dp, df){
+  const c = document.getElementById('count'), f = document.getElementById('faces');
+  c.textContent = +c.textContent + dp; f.textContent = +f.textContent + df;
+}
+
+async function upload(files){
+  if (!files.length || busy) return;
+  busy = true; prog.style.display = 'block'; bar.style.width = '0';
+  drop.classList.add('busy');
+  let done = 0, ok = 0, faces = 0; const errors = [];
+  const BATCH = 3;
+  for (let i = 0; i < files.length; i += BATCH) {
+    const fd = new FormData();
+    files.slice(i, i + BATCH).forEach(f => fd.append('files', f, f.name));
+    log.textContent = `Uploading & scanning faces… ${done}/${files.length}`;
+    try {
+      const res = await fetch(`/api/admin/events/${EID}/photos`, { method: 'POST', body: fd, headers: { 'X-CSRF-Token': CSRF } });
+      if (res.status === 401) { location.href = '/admin/login'; return; }
+      if (res.status === 403) { errors.push('Session expired, reload the page'); break; }
+      if (!res.ok) { errors.push(`Batch failed (HTTP ${res.status})`); }
+      const j = res.ok ? await res.json() : { results: [] };
+      for (const r of j.results) {
+        if (r.ok) { ok++; faces += r.faces; addTile(r); bump(1, r.faces); } else errors.push(`${r.name}: ${r.error}`);
+      }
+    } catch (e) { errors.push(`Batch failed: ${e}`); }
+    done = Math.min(files.length, i + BATCH);
+    bar.style.width = (done / files.length * 100) + '%';
+  }
+  // build with textContent so a strange file name can't inject HTML
+  log.textContent = `Done. ${ok} uploaded, ${faces} faces found.`;
+  if (errors.length) {
+    const sp = document.createElement('span'); sp.style.color = 'var(--bad)'; sp.style.display = 'block';
+    sp.textContent = `${errors.length} failed: ${errors.slice(0,3).join('; ')}`; log.appendChild(sp);
+  }
+  busy = false; drop.classList.remove('busy');
+}
+
+async function delPhoto(btn){
+  const t = btn.closest('.tile');
+  if (!confirm('Delete this photo?')) return;
+  const r = await fetch(`/api/admin/photos/${t.dataset.id}`, { method: 'DELETE', headers: { 'X-CSRF-Token': CSRF } });
+  if (r.ok) { bump(-1, -(+t.dataset.faces)); t.remove(); }
+  else if (r.status === 401) location.href = '/admin/login';
+  else alert('Could not delete the photo. Reload the page and try again.');
+}
+</script>
+{% endblock %}

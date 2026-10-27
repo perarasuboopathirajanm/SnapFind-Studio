@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}{{ ev.name }} · Find your photos{% endblock %}
+{% block topbar %}{% endblock %}
+{% block credit %}{% endblock %}
+{% block body %}
+<main class="guest">
+  <div class="guest-head">
+    <div class="eyebrow">{{ STUDIO_NAME }}</div>
+    <h1 style="font-size:2.4rem;margin:.2em 0 .1em">{{ ev.name }}</h1>
+    <div class="muted small">{{ ev.event_date or "" }}{% if ev.event_date %} · {% endif %}{{ photo_count }} photos</div>
+  </div>
+
+  <!-- 1. intro -->
+  <section class="screen active" id="s-intro">
+    <div class="card center" style="margin-top:14px">
+      <h2>Find your photos</h2>
+      <p class="muted">Take a quick selfie with your front camera. We'll match your face against every photo from this event.</p>
+      <button class="btn primary lg block" id="start">Open camera</button>
+      <label class="btn ghost block" style="margin-top:10px;color:var(--text);font-size:.95rem">
+        Upload a selfie instead<input type="file" accept="image/*" capture="user" id="pick" hidden>
+      </label>
+      <p class="muted small" style="margin-top:16px">Your selfie is only used for this search and isn't stored.</p>
+    </div>
+  </section>
+
+  <!-- 2. camera -->
+  <section class="screen" id="s-cam">
+    <div class="cam">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="guide"></div>
+      <div class="hint">Fit your face in the oval · good light helps</div>
+    </div>
+    <button class="shutter" id="snap" aria-label="Take selfie"><span></span></button>
+    <p class="center"><button class="btn ghost sm" id="cancel">Cancel</button></p>
+  </section>
+
+  <!-- 3. searching -->
+  <section class="screen" id="s-wait">
+    <div class="spinner"></div>
+    <p class="center muted">Searching {{ photo_count }} photos for your face…</p>
+  </section>
+
+  <!-- 4. results -->
+  <section class="screen" id="s-res">
+    <div class="results-bar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img id="mini" class="selfie-mini" alt="Your selfie">
+        <div><b id="rcount" style="font-family:var(--serif);font-size:1.6rem;font-weight:400"></b><div class="muted small" id="rsub"></div></div>
+      </div>
+      <button class="btn sm" id="retake">Retake</button>
+    </div>
+    <div id="actions" class="row" style="margin-bottom:12px">
+      <button class="btn sm" id="selall">Select all</button>
+      <button class="btn primary sm" id="zip">Download all (ZIP)</button>
+    </div>
+    <div class="rgrid" id="rgrid"></div>
+    <div id="none" class="card center" style="display:none">
+      <h3>No matches yet</h3>
+      <p class="muted">Try another selfie facing the camera straight on, without sunglasses, in brighter light. The studio may also still be uploading photos.</p>
+      <button class="btn primary" onclick="retake()">Try again</button>
+    </div>
+  </section>
+
+  <div class="alert" id="err" style="display:none;margin-top:14px"></div>
+  <p class="foot">Powered by {{ STUDIO_NAME }} · Built by {{ AUTHOR }}</p>
+</main>
+
+<div class="lightbox" id="lb">
+  <img id="lbimg" alt="">
+  <div class="row" style="justify-content:center;flex:0">
+    <a class="btn primary" id="lbdl" download>Download</a>
+    <button class="btn" onclick="closeLb()">Close</button>
+  </div>
+</div>
+
+<script>
+const SLUG = {{ ev.slug|tojson }};
+const $ = id => document.getElementById(id);
+let stream = null, matches = [], selected = new Set();
+
+function show(id){ document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); window.scrollTo(0,0); }
+function err(msg){ const e = $('err'); e.textContent = msg; e.style.display = msg ? 'block' : 'none'; }
+
+async function openCam(){
+  err('');
+  if (!navigator.mediaDevices?.getUserMedia) {
+    err('Camera is not available here (it needs HTTPS). Use "Upload a selfie instead".'); return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false });
+    $('video').srcObject = stream;
+    show('s-cam');
+  } catch (e) {
+    err(e.name === 'NotAllowedError'
+      ? 'Camera permission was blocked. Allow camera access in your browser settings, or upload a selfie instead.'
+      : 'Could not open the camera: ' + e.message);
+  }
+}
+function stopCam(){ stream?.getTracks().forEach(t => t.stop()); stream = null; }
+
+$('start').onclick = openCam;
+$('cancel').onclick = () => { stopCam(); show('s-intro'); };
+$('retake').onclick = retake;
+function retake(){ matches = []; selected.clear(); openCam(); }
+
+$('snap').onclick = () => {
+  const v = $('video'), c = document.createElement('canvas');
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0);
+  stopCam();
+  c.toBlob(b => search(b), 'image/jpeg', 0.92);
+};
+$('pick').onchange = e => { const f = e.target.files[0]; if (f) search(f); e.target.value = ''; };
+
+async function search(blob){
+  err(''); show('s-wait');
+  $('mini').src = URL.createObjectURL(blob);
+  const fd = new FormData(); fd.append('selfie', blob, 'selfie.jpg');
+  try {
+    const r = await fetch(`/api/e/${SLUG}/match`, { method: 'POST', body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(r.status === 413 ? 'That photo is too large. Try a smaller one.' : (j.detail || 'Search failed'));
+    if (!j.ok) { show('s-intro'); err(j.message); return; }
+    matches = j.matches; renderResults();
+  } catch (e) { show('s-intro'); err('Something went wrong: ' + e.message); }
+}
+
+function renderResults(){
+  const g = $('rgrid'); g.innerHTML = '';
+  const n = matches.length;
+  $('rcount').textContent = n ? `${n} photo${n === 1 ? '' : 's'} found` : 'No photos found';
+  $('rsub').textContent = n ? 'Tap a photo to view · tick to select' : '';
+  $('none').style.display = n ? 'none' : 'block';
+  $('actions').style.display = n ? 'flex' : 'none';
+  matches.forEach(m => {
+    const d = document.createElement('div'); d.className = 'rtile';
+    d.innerHTML = `<img loading="lazy" src="${m.thumb}" alt="Matched photo">
+      <button class="sel" aria-label="Select">✓</button>
+      <a class="dl" href="${m.download}" download aria-label="Download"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg></a>`;
+    d.querySelector('img').onclick = () => openLb(m);
+    d.querySelector('.sel').onclick = () => { selected.has(m.uid) ? selected.delete(m.uid) : selected.add(m.uid); d.classList.toggle('on'); updateZip(); };
+    g.appendChild(d);
+  });
+  updateZip(); show('s-res');
+}
+function updateZip(){
+  $('zip').textContent = selected.size ? `Download selected (${selected.size})` : 'Download all (ZIP)';
+  $('selall').textContent = selected.size === matches.length && matches.length ? 'Clear selection' : 'Select all';
+}
+$('selall').onclick = () => {
+  const all = selected.size !== matches.length;
+  selected = new Set(all ? matches.map(m => m.uid) : []);
+  document.querySelectorAll('.rtile').forEach(t => t.classList.toggle('on', all));
+  updateZip();
+};
+$('zip').onclick = async () => {
+  const uids = selected.size ? [...selected] : matches.map(m => m.uid);
+  const b = $('zip'); const old = b.textContent; b.textContent = 'Preparing…'; b.disabled = true;
+  try {
+    const r = await fetch(`/api/e/${SLUG}/zip`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uids }) });
+    if (!r.ok) throw new Error('Download failed');
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${SLUG}-my-photos.zip` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (e) { err(e.message); }
+  b.textContent = old; b.disabled = false;
+};
+
+function openLb(m){ $('lbimg').src = m.full; $('lbdl').href = m.download; $('lb').classList.add('open'); }
+function closeLb(){ $('lb').classList.remove('open'); $('lbimg').removeAttribute('src'); }
+$('lb').onclick = e => { if (e.target.id === 'lb') closeLb(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLb(); });
+</script>
+{% endblock %}

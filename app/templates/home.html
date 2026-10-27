@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block nav %}<a href="/admin">Studio login</a>{% endblock %}
+{% block body %}
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <h1>Find every photo<br><em>you're in.</em></h1>
+      <p class="lead">Scan the QR code at your event, take a quick selfie, and we'll pull out just your photos from the whole shoot, ready to download.</p>
+      <form action="/go" method="post" class="row" style="max-width:480px;margin-top:22px">
+        <div style="flex:2"><label for="code">Have an event code instead?</label>
+          <input id="code" name="code" type="text" placeholder="e.g. wedding-riya-arjun-3f9a1c" required></div>
+        <div style="flex:0 0 auto"><button class="btn primary">Open event</button></div>
+      </form>
+    </div>
+    <div class="filmstrip" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+  </section>
+  <section class="steps">
+    <div class="step"><b>01</b><h3>Scan</h3><p class="muted">Point your phone camera at the QR code from the studio.</p></div>
+    <div class="step"><b>02</b><h3>Selfie</h3><p class="muted">Allow the front camera and snap one clear photo of your face.</p></div>
+    <div class="step"><b>03</b><h3>Download</h3><p class="muted">See only your matches. Save them one by one or all at once.</p></div>
+  </section>
+</main>
+<p class="foot">Your selfie is only used to search and is never saved.</p>
+{% endblock %}

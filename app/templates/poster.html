@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block topbar %}{% endblock %}
+{% block credit %}{% endblock %}
+{% block body %}
+<style>
+  body{background:#fff;color:#111}
+  .poster{max-width:640px;margin:30px auto;text-align:center;padding:40px 30px;border:1px solid #ddd;border-radius:20px}
+  .poster h1{color:#111;font-size:3rem}
+  .poster p{color:#555;font-size:1.1rem}
+  .poster img{margin:20px auto;width:360px;max-width:100%}
+  .poster code{font-size:.9rem;color:#333;word-break:break-all}
+  @media print{.poster{border:0;margin:0 auto}}
+</style>
+<div class="poster">
+  <div style="letter-spacing:.2em;text-transform:uppercase;font-size:.8rem;color:#c2551f">{{ STUDIO_NAME }}</div>
+  <h1>{{ ev.name }}</h1>
+  <p>Scan to find your photos.<br>Take a selfie and we'll show every picture you're in.</p>
+  <img src="/admin/events/{{ ev.id }}/qr.png?size=14" alt="QR code">
+  <p><code>{{ link }}</code></p>
+</div>
+<p class="center noprint"><button class="btn primary" onclick="print()" style="color:#1a0f07">Print poster</button></p>
+{% endblock %}

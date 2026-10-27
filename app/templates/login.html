@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Studio login · {{ STUDIO_NAME }}{% endblock %}
+{% block body %}
+<main class="wrap narrow" style="padding-top:60px">
+  <div class="card">
+    <h2>Studio login</h2>
+    <p class="muted small">Admin area for uploading event photos and creating QR codes.</p>
+    {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/admin/login">
+      <div class="field"><label for="u">Username</label><input id="u" name="username" type="text" autocomplete="username" required></div>
+      <div class="field"><label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn primary block">Log in</button>
+    </form>
+    {% if temp_pw %}<p class="note" style="margin-top:16px">No <code>ADMIN_PASSWORD</code> is set, so a temporary password was printed in the server log (on Hugging Face: the <b>Logs</b> tab). Set <code>ADMIN_PASSWORD</code> in your Space secrets to choose your own.</p>{% endif %}
+  </div>
+</main>
+{% endblock %}

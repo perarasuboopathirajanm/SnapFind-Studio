@@ -1,0 +1,11 @@
+# SnapFind Studio - (c) 2026 Perarasu Boopathirajan. All rights reserved.
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+jinja2==3.1.6
+itsdangerous==2.2.0
+opencv-python-headless==4.10.0.84
+numpy<2.3
+pillow==11.1.0
+pillow-heif==0.21.0
+qrcode==8.0

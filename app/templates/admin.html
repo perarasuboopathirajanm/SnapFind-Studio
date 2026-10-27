@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · {{ STUDIO_NAME }}{% endblock %}
+{% block nav %}<span class="muted small">Admin</span><form method="post" action="/admin/logout" class="inline-form"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="linkbtn">Log out</button></form>{% endblock %}
+{% block body %}
+<main class="wrap">
+  <h1 style="font-size:2.6rem">Dashboard</h1>
+  {% if on_hf and not persistent %}
+  <p class="note">Heads up: this Space has no persistent storage, so photos are wiped when the Space restarts. Enable <b>Persistent storage</b> in Space settings to keep them.</p>
+  {% endif %}
+  <div class="stats">
+    <div class="stat"><b>{{ totals.events }}</b><span class="muted small">Events</span></div>
+    <div class="stat"><b>{{ totals.photos }}</b><span class="muted small">Photos</span></div>
+    <div class="stat"><b>{{ totals.faces }}</b><span class="muted small">Faces indexed</span></div>
+  </div>
+
+  <div class="card" style="margin-bottom:26px">
+    <h3>New event</h3>
+    <form method="post" action="/admin/events" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div style="flex:2"><label for="n">Event name</label><input id="n" name="name" type="text" placeholder="Riya &amp; Arjun Wedding" required></div>
+      <div><label for="d">Date</label><input id="d" name="event_date" type="date"></div>
+      <div style="flex:0 0 auto"><button class="btn primary">Create event</button></div>
+    </form>
+  </div>
+
+  <h2>Events</h2>
+  {% if events %}
+  <div class="events">
+    {% for e in events %}
+    <a class="event-card" href="/admin/events/{{ e.id }}">
+      <h3 style="margin:0">{{ e.name }}</h3>
+      <div class="muted small">{{ e.event_date or "No date" }}</div>
+      <div class="meta"><span>{{ e.photos }} photos</span><span>{{ e.faces }} faces</span></div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No events yet. Create your first one above.</p>
+  {% endif %}
+  <div style="height:60px"></div>
+</main>
+{% endblock %}
