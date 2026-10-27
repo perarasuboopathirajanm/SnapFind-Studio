@@ -12,6 +12,12 @@ pinned: false
 
 Created by **Perarasu Boopathirajan** · © 2026 · All rights reserved
 
+![SnapFind Studio: every guest finds their photos with one selfie](docs/cover.png)
+
+| For guests | For the studio |
+|---|---|
+| ![Guest flow: scan the QR, take a selfie, get your photos](docs/guest-experience.png) | ![Studio dashboard: bulk upload, face indexing, QR poster](docs/studio-dashboard.png) |
+
 
 The studio uploads event photos. Guests scan a QR code, take a selfie with the front camera, and see and download only the photos they appear in.
 
