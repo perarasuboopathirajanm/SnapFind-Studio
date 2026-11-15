@@ -1,0 +1,14 @@
+name: authorship-check
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check authorship notice
+        run: |
+          expected=$(printf '%s' 'Perarasu Boopathirajan|SnapFind-Studio' | sha256sum | cut -d' ' -f1)
+          if ! grep -q "$expected" AUTHORSHIP.md 2>/dev/null; then
+            echo "::warning::AUTHORSHIP.md is missing or changed. This project was created by Perarasu Boopathirajan."
+          fi
+          exit 0
